@@ -1,0 +1,1031 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Broomstick Drift - Bloody Daylight</title>
+    <style>
+        /* Font mới: Sedgwick Ave Display (Nét vẽ điên loạn, đậm, dễ đọc) */
+        @import url('https://fonts.googleapis.com/css2?family=Sedgwick+Ave+Display&family=Roboto+Mono:wght@700&display=swap');
+
+        body {
+            margin: 0;
+            overflow: hidden;
+            background-color: #e6e1d3; /* Màu xương trắng ngà */
+            color: #4a0000; /* Chữ đỏ máu thẫm */
+            font-family: 'Roboto Mono', monospace;
+            touch-action: none;
+            user-select: none;
+        }
+
+        #game-container {
+            position: relative;
+            width: 100vw;
+            height: 100vh;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            overflow: hidden;
+            background: #e6e1d3;
+        }
+
+        canvas {
+            display: block;
+            box-shadow: 0 0 30px rgba(160, 0, 0, 0.6); /* Hào quang máu */
+            background: #e6e1d3;
+            border: 3px solid #4a0000;
+        }
+
+        .shake {
+            animation: shake-screen 0.5s cubic-bezier(.36,.07,.19,.97) both;
+        }
+
+        @keyframes shake-screen {
+            10%, 90% { transform: translate3d(-2px, 0, 0) rotate(-1deg); }
+            20%, 80% { transform: translate3d(4px, 0, 0) rotate(2deg); }
+            30%, 50%, 70% { transform: translate3d(-6px, 0, 0) rotate(-2deg); }
+            40%, 60% { transform: translate3d(6px, 0, 0) rotate(1deg); }
+        }
+
+        #ui-layer {
+            position: absolute;
+            top: 0; left: 0; width: 100%; height: 100%;
+            pointer-events: none;
+            display: flex; flex-direction: column; justify-content: space-between;
+            padding: 20px; box-sizing: border-box; z-index: 20;
+        }
+
+        /* Bloody Vignette - Ám đỏ các góc */
+        #vignette {
+            position: absolute;
+            top: 0; left: 0; width: 100%; height: 100%;
+            background: radial-gradient(circle, transparent 40%, rgba(139, 0, 0, 0.1) 80%, rgba(100, 0, 0, 0.6) 100%);
+            pointer-events: none;
+            z-index: 10;
+            mix-blend-mode: multiply;
+        }
+
+        .hud {
+            display: flex; justify-content: space-between;
+            font-size: 28px;
+            color: #4a0000;
+            font-weight: bold;
+        }
+
+        .timer-box {
+            font-family: 'Sedgwick Ave Display', cursive;
+            font-size: 60px;
+            color: #cc0000;
+            text-align: center;
+            text-shadow: 2px 2px 0px #000;
+        }
+        
+        .timer-warning {
+            color: #ff0000;
+            animation: pulse-blood 0.5s infinite;
+        }
+
+        @keyframes pulse-blood {
+            0% { transform: scale(1); text-shadow: 0 0 10px red; }
+            50% { transform: scale(1.1); text-shadow: 0 0 20px red; }
+            100% { transform: scale(1); text-shadow: 0 0 10px red; }
+        }
+
+        .screen {
+            position: absolute;
+            top: 50%; left: 50%; transform: translate(-50%, -50%);
+            text-align: center;
+            background: rgba(240, 235, 220, 0.95);
+            padding: 40px;
+            border: 4px solid #4a0000;
+            box-shadow: 10px 10px 0px rgba(80,0,0,0.3);
+            border-radius: 2px;
+            pointer-events: auto;
+            min-width: 320px;
+            z-index: 30;
+        }
+
+        h1 {
+            font-family: 'Sedgwick Ave Display', cursive;
+            font-size: 70px;
+            margin: 0 0 10px 0;
+            color: #2b0a0a;
+            text-shadow: 4px 4px 0px #cc0000;
+            line-height: 1;
+            text-transform: uppercase;
+        }
+
+        .tagline {
+            color: #800000;
+            font-style: italic;
+            margin-bottom: 30px;
+            font-size: 22px;
+            border-bottom: 2px solid #4a0000;
+            padding-bottom: 10px;
+            font-weight: bold;
+        }
+
+        .btn {
+            background: #4a0000;
+            color: #fff;
+            border: none;
+            padding: 15px 40px;
+            font-size: 32px;
+            font-family: 'Sedgwick Ave Display', cursive;
+            cursor: pointer;
+            transition: all 0.2s;
+            margin-top: 20px;
+            box-shadow: 5px 5px 0px #aa0000;
+        }
+
+        .btn:hover {
+            transform: translate(-2px, -2px);
+            background: #660000;
+            box-shadow: 7px 7px 0px #cc0000;
+        }
+
+        .btn:active { 
+            transform: translate(2px, 2px);
+            box-shadow: 2px 2px 0px #aa0000;
+        }
+
+        .hidden { display: none !important; }
+
+        #death-msg {
+            font-size: 28px;
+            color: #cc0000;
+            margin-bottom: 20px;
+            font-family: 'Roboto Mono', monospace;
+            font-weight: bold;
+            text-transform: uppercase;
+        }
+
+        /* Noise texture for "Dirty Film" feel */
+        .scanlines {
+            position: absolute;
+            top: 0; left: 0; width: 100%; height: 100%;
+            background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noiseFilter'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.8' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noiseFilter)' opacity='0.15'/%3E%3C/svg%3E");
+            pointer-events: none;
+            z-index: 15;
+            mix-blend-mode: multiply;
+        }
+        
+        .guide {
+            text-align: left;
+            margin-bottom: 20px;
+            font-size: 18px;
+            color: #330000;
+            line-height: 1.6;
+            font-weight: bold;
+        }
+        .key { background: #4a0000; color: #fff; padding: 2px 6px; }
+    </style>
+</head>
+<body>
+
+<div id="game-container">
+    <canvas id="gameCanvas"></canvas>
+    <div id="vignette"></div>
+    <div class="scanlines"></div>
+
+    <div id="ui-layer">
+        <div class="hud">
+            <div id="score-display">LINH HỒN: 0</div>
+            <div id="timer-display" class="timer-box">60</div>
+        </div>
+    </div>
+
+    <!-- Start Screen -->
+    <div id="start-screen" class="screen">
+        <h1>HUYẾT<br>NGUYỆT</h1>
+        <div class="tagline">"Tổ lái trong vũng máu!"</div>
+        
+        <div class="guide">
+            🩸 <b>LUẬT SINH TỒN:</b><br>
+            - Giữ <span class="key">Space/Chuột</span>: Rồ ga.<br>
+            - Thả tay: Drift tự do.<br>
+            - Ăn 🩸 để sống (+3s).<br>
+            - Coi chừng gai nhọn & ảo giác!
+        </div>
+        
+        <button class="btn" onclick="startGame()">HIẾN TẾ</button>
+    </div>
+
+    <!-- Game Over Screen -->
+    <div id="game-over-screen" class="screen hidden">
+        <h1 style="color: #cc0000; text-shadow: 2px 2px 0 #000;">TỬ NẠN!</h1>
+        <div id="death-msg">...</div>
+        <div id="final-score" style="margin-bottom: 20px; color: #000; font-size: 24px; font-weight: bold;">Linh hồn: 0</div>
+        <button class="btn" onclick="resetGame()">HỒI SINH</button>
+    </div>
+</div>
+
+<script>
+/**
+ * BROOMSTICK DRIFT - BLOODY DAYLIGHT EDITION (v3.0)
+ * + Thêm tiếng tim đập lớn khi sắp hết giờ.
+ * + Tối ưu hiển thị ngoài trời (High Contrast).
+ */
+
+const CANVAS_WIDTH = 800;
+const CANVAS_HEIGHT = 450;
+
+// Physics Config
+const GRAVITY = 0.4;       
+const THRUST_X = 0.15;     
+const THRUST_Y = 0.7;      
+const DRAG_X = 0.99;       
+const DRAG_Y = 0.98;       
+const MAX_VELOCITY = 6;    
+
+const START_TIME = 60;
+
+// --- AUDIO SYSTEM ---
+const AudioContext = window.AudioContext || window.webkitAudioContext;
+let audioCtx;
+let engineOsc, engineGain, engineMod;
+let droneOsc, droneGain; 
+
+function initAudio() {
+    if (!audioCtx) {
+        audioCtx = new AudioContext();
+        
+        // Engine (Deep Growl)
+        engineOsc = audioCtx.createOscillator();
+        engineOsc.type = 'sawtooth';
+        engineMod = audioCtx.createOscillator();
+        engineMod.type = 'square';
+        engineMod.frequency.value = 20; 
+        const modGain = audioCtx.createGain();
+        modGain.gain.value = 150;
+        engineMod.connect(modGain);
+        modGain.connect(engineOsc.frequency);
+        engineGain = audioCtx.createGain();
+        engineGain.gain.value = 0;
+        const filter = audioCtx.createBiquadFilter();
+        filter.type = 'lowpass';
+        filter.frequency.value = 250; 
+        engineOsc.connect(filter);
+        filter.connect(engineGain);
+        engineGain.connect(audioCtx.destination);
+        
+        // Drone (Unsettling Atmosphere)
+        droneOsc = audioCtx.createOscillator();
+        droneOsc.type = 'triangle';
+        droneOsc.frequency.value = 50; 
+        const droneLFO = audioCtx.createOscillator();
+        droneLFO.type = 'sine';
+        droneLFO.frequency.value = 0.1; 
+        const lfoGain = audioCtx.createGain();
+        lfoGain.gain.value = 5;
+        droneLFO.connect(lfoGain);
+        lfoGain.connect(droneOsc.frequency);
+        droneGain = audioCtx.createGain();
+        droneGain.gain.value = 0; 
+        droneOsc.connect(droneGain);
+        droneGain.connect(audioCtx.destination);
+        
+        engineOsc.start();
+        engineMod.start();
+        droneOsc.start();
+        droneLFO.start();
+    }
+    if (audioCtx.state === 'suspended') {
+        audioCtx.resume();
+    }
+}
+
+function setDroneVolume(vol) {
+    if (droneGain) {
+        droneGain.gain.setTargetAtTime(vol, audioCtx.currentTime, 1);
+    }
+}
+
+// Hàm tiếng tim đập (MỚI)
+function playHeartbeat(vol) {
+    if (!audioCtx) return;
+    const osc = audioCtx.createOscillator();
+    const gain = audioCtx.createGain();
+    osc.connect(gain);
+    gain.connect(audioCtx.destination);
+    
+    const now = audioCtx.currentTime;
+    
+    // Tiếng tim đập trầm "Bùm"
+    osc.type = 'triangle';
+    osc.frequency.setValueAtTime(60, now);
+    osc.frequency.exponentialRampToValueAtTime(30, now + 0.1);
+    
+    // Volume cao để nghe rõ
+    gain.gain.setValueAtTime(vol, now); 
+    gain.gain.exponentialRampToValueAtTime(0.01, now + 0.15);
+    
+    osc.start(now);
+    osc.stop(now + 0.15);
+}
+
+// Random horror sound generator
+function playCreepySound() {
+    if (!audioCtx) return;
+    const osc = audioCtx.createOscillator();
+    const gain = audioCtx.createGain();
+    
+    const type = Math.random();
+    
+    if (type < 0.3) {
+        // High pitched screech
+        osc.type = 'sawtooth';
+        osc.frequency.setValueAtTime(800 + Math.random()*500, audioCtx.currentTime);
+        osc.frequency.exponentialRampToValueAtTime(200, audioCtx.currentTime + 0.5);
+        gain.gain.setValueAtTime(0.1, audioCtx.currentTime);
+        gain.gain.linearRampToValueAtTime(0, audioCtx.currentTime + 0.5);
+        osc.start();
+        osc.stop(audioCtx.currentTime + 0.5);
+    } else if (type < 0.6) {
+        // Low piano strike
+        osc.type = 'triangle';
+        osc.frequency.setValueAtTime(50, audioCtx.currentTime);
+        osc.frequency.exponentialRampToValueAtTime(10, audioCtx.currentTime + 1.0);
+        gain.gain.setValueAtTime(0.3, audioCtx.currentTime);
+        gain.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + 1.0);
+        osc.start();
+        osc.stop(audioCtx.currentTime + 1.0);
+    } else {
+        // Whisper noise
+        const bufferSize = audioCtx.sampleRate * 0.5;
+        const buffer = audioCtx.createBuffer(1, bufferSize, audioCtx.sampleRate);
+        const data = buffer.getChannelData(0);
+        for (let i = 0; i < bufferSize; i++) data[i] = Math.random() * 2 - 1;
+        
+        const noise = audioCtx.createBufferSource();
+        noise.buffer = buffer;
+        const noiseGain = audioCtx.createGain();
+        
+        const noiseFilter = audioCtx.createBiquadFilter();
+        noiseFilter.type = 'bandpass';
+        noiseFilter.frequency.value = 1000;
+        noiseFilter.Q.value = 1;
+        
+        noise.connect(noiseFilter);
+        noiseFilter.connect(noiseGain);
+        noiseGain.connect(audioCtx.destination);
+        
+        noiseGain.gain.setValueAtTime(0.1, audioCtx.currentTime);
+        noiseGain.gain.linearRampToValueAtTime(0, audioCtx.currentTime + 0.5);
+        noise.start();
+    }
+}
+
+function playSound(type) {
+    if (!audioCtx) return;
+    const osc = audioCtx.createOscillator();
+    const gain = audioCtx.createGain();
+    osc.connect(gain);
+    gain.connect(audioCtx.destination);
+    const now = audioCtx.currentTime;
+
+    if (type === 'collect') {
+        osc.type = 'sine';
+        osc.frequency.setValueAtTime(523.25, now); // C5
+        osc.frequency.setValueAtTime(659.25, now + 0.1); // E5
+        gain.gain.setValueAtTime(0.2, now);
+        gain.gain.linearRampToValueAtTime(0, now + 0.3);
+        osc.start(now);
+        osc.stop(now + 0.3);
+    } else if (type === 'crash') {
+        osc.type = 'sawtooth';
+        osc.frequency.setValueAtTime(100, now);
+        osc.frequency.exponentialRampToValueAtTime(20, now + 0.3);
+        gain.gain.setValueAtTime(0.5, now); 
+        gain.gain.exponentialRampToValueAtTime(0.01, now + 0.3);
+        osc.start(now);
+        osc.stop(now + 0.3);
+    }
+}
+
+// --- GAME LOGIC ---
+const canvas = document.getElementById('gameCanvas');
+const ctx = canvas.getContext('2d');
+const container = document.getElementById('game-container');
+
+function resize() {
+    let scale = Math.min(window.innerWidth / CANVAS_WIDTH, window.innerHeight / CANVAS_HEIGHT);
+    canvas.style.width = (CANVAS_WIDTH * scale) + 'px';
+    canvas.style.height = (CANVAS_HEIGHT * scale) + 'px';
+}
+canvas.width = CANVAS_WIDTH;
+canvas.height = CANVAS_HEIGHT;
+window.addEventListener('resize', resize);
+resize();
+
+let gameState = 'start'; 
+let frameCount = 0;
+let score = 0;
+let timeLeft = START_TIME;
+let inputActive = false;
+let gameSpeed = 3;
+let distance = 0;
+let phase = 1;
+let animationId = null; 
+
+// Entities
+let player;
+let obstacles = [];
+let particles = [];
+let items = [];
+let ragdollParts = [];
+let bgElements = []; 
+
+// Assets
+const COLORS = {
+    witch: '#300',      
+    hat: '#000',     
+    broom: '#4a3b32',   
+    flame: ['#800', '#500', '#000'], 
+    skyStart: '#ffffff', 
+    skyEnd: '#e6e1d3',   
+    obst1: '#1a0505',    
+    obst2: '#2b0000', 
+    obst3: '#2b0a0a', 
+};
+
+const INSULTS = [
+    "MÁU NHUỘM SÂN TRƯỜNG!",
+    "HỒN MA KHÔNG ĐẦU!",
+    "BỊ QUỶ ÁM À?",
+    "KHÔNG CÒN NGUYÊN VẸN!",
+    "HIẾN TẾ THẤT BẠI!",
+    "CHẾT TRONG ĐAU ĐỚN!"
+];
+
+// --- CLASSES ---
+
+class BackgroundElement {
+    constructor() {
+        this.x = Math.random() * CANVAS_WIDTH;
+        this.y = Math.random() * CANVAS_HEIGHT;
+        this.type = Math.random() > 0.7 ? 'blood' : 'dust';
+        this.size = this.type === 'blood' ? Math.random() * 4 + 2 : Math.random() * 2 + 0.5;
+        this.speed = Math.random() * 0.5 + 0.1; 
+        this.alpha = this.type === 'blood' ? Math.random() * 0.4 + 0.2 : Math.random() * 0.3;
+    }
+    update(baseSpeed) {
+        this.x -= baseSpeed * this.speed;
+        if (this.x < 0) {
+            this.x = CANVAS_WIDTH;
+            this.y = Math.random() * CANVAS_HEIGHT;
+        }
+    }
+    draw() {
+        if (this.type === 'blood') {
+            ctx.fillStyle = `rgba(139, 0, 0, ${this.alpha})`;
+            ctx.beginPath();
+            ctx.arc(this.x, this.y, this.size, 0, Math.PI*2);
+            ctx.fill();
+        } else {
+            ctx.fillStyle = `rgba(0, 0, 0, ${this.alpha})`;
+            ctx.fillRect(this.x, this.y, this.size, this.size);
+        }
+    }
+}
+
+class Player {
+    constructor() {
+        this.x = 100;
+        this.y = 200;
+        this.vx = 0;
+        this.vy = 0;
+        this.width = 40;
+        this.height = 20;
+        this.angle = 0;
+        this.dead = false;
+    }
+
+    update() {
+        if (this.dead) return;
+
+        if (inputActive) {
+            this.vx += THRUST_X;
+            this.vy -= THRUST_Y;
+            
+            for(let i=0; i<3; i++) { 
+                particles.push(new Particle(this.x - 10, this.y + 10, -Math.random()*6 - this.vx, (Math.random()-0.5)*3, 'fire'));
+            }
+            
+            if(engineOsc) {
+                let targetFreq = 60 + (Math.abs(this.vy)*10) + (this.vx * 10); 
+                engineOsc.frequency.setTargetAtTime(targetFreq, audioCtx.currentTime, 0.1);
+            }
+            if(engineGain) engineGain.gain.setTargetAtTime(0.3, audioCtx.currentTime, 0.1);
+
+        } else {
+            if(engineOsc) engineOsc.frequency.setTargetAtTime(30, audioCtx.currentTime, 0.2);
+            if(engineGain) engineGain.gain.setTargetAtTime(0.05, audioCtx.currentTime, 0.2);
+        }
+
+        this.vy += GRAVITY;
+        this.vx *= DRAG_X;
+        this.vy *= DRAG_Y;
+
+        if (this.vx > MAX_VELOCITY) this.vx = MAX_VELOCITY;
+        if (this.vy < -MAX_VELOCITY) this.vy = -MAX_VELOCITY; 
+        if (this.vy > MAX_VELOCITY * 1.5) this.vy = MAX_VELOCITY * 1.5; 
+
+        this.x += this.vx;
+        this.y += this.vy;
+
+        if (this.y < 0) { this.y = 0; this.vy = 0; } 
+        if (this.y > CANVAS_HEIGHT - this.height) { 
+            gameOver("Đập đất ăn cháo!");
+        }
+
+        if (this.x > 200) {
+            let excess = this.x - 200;
+            this.x = 200;
+            distance += excess;
+            obstacles.forEach(o => o.x -= excess);
+            items.forEach(i => i.x -= excess);
+            bgElements.forEach(s => s.x -= excess * s.speed);
+        }
+
+        let targetAngle = Math.atan2(this.vy, this.vx + 8) * 0.6;
+        this.angle += (targetAngle - this.angle) * 0.1; 
+    }
+
+    getHitbox() {
+        return {
+            x: this.x + 10, 
+            y: this.y + 5,  
+            width: this.width - 20, 
+            height: this.height - 10 
+        };
+    }
+
+    draw() {
+        if (this.dead) return;
+        ctx.save();
+        ctx.translate(this.x + this.width/2, this.y + this.height/2);
+        ctx.rotate(this.angle);
+
+        ctx.fillStyle = COLORS.broom;
+        ctx.fillRect(-35, 5, 70, 6);
+        
+        ctx.fillStyle = '#1a0505'; 
+        ctx.beginPath();
+        ctx.moveTo(-35, 5);
+        ctx.lineTo(-55, -5);
+        ctx.lineTo(-60, 8); 
+        ctx.lineTo(-55, 20);
+        ctx.lineTo(-35, 11);
+        ctx.fill();
+
+        ctx.fillStyle = '#000'; 
+        ctx.fillRect(-25, 2, 20, 12);
+        
+        ctx.fillStyle = '#100'; 
+        ctx.beginPath();
+        ctx.ellipse(0, 0, 12, 10, 0, 0, Math.PI * 2);
+        ctx.fill();
+
+        ctx.fillStyle = '#e6e1d3'; 
+        ctx.beginPath();
+        ctx.arc(5, -12, 9, 0, Math.PI * 2);
+        ctx.fill();
+        
+        ctx.fillStyle = '#000';
+        ctx.beginPath();
+        ctx.arc(8, -14, 2, 0, Math.PI*2);
+        ctx.fill();
+
+        ctx.fillStyle = '#000';
+        ctx.beginPath();
+        ctx.moveTo(-5, -16);
+        ctx.lineTo(15, -16);
+        ctx.lineTo(5, -45); 
+        ctx.fill();
+        ctx.fillStyle = '#800'; 
+        ctx.fillRect(-2, -20, 14, 4);
+
+        ctx.restore();
+    }
+}
+
+class Obstacle {
+    constructor(x, type) {
+        this.x = x;
+        this.type = type; 
+        this.passed = false;
+        
+        if (type === 1) { 
+            this.w = 60;
+            this.h = 100 + Math.random() * 180;
+            if (this.h > 300) this.h = 300;
+            this.y = CANVAS_HEIGHT - this.h;
+        } else if (type === 2) { 
+            this.w = 30;
+            this.h = 30;
+            this.y = 50 + Math.random() * (CANVAS_HEIGHT - 150);
+            this.startY = this.y;
+            this.offset = Math.random() * Math.PI * 2;
+        } else if (type === 3) { 
+            this.w = 10;
+            this.h = 120 + Math.random() * 100;
+            this.y = 0;
+        }
+    }
+
+    update() {
+        this.x -= gameSpeed;
+        if (this.type === 2) {
+            this.y = this.startY + Math.sin(frameCount * 0.05 + this.offset) * 60;
+        }
+    }
+
+    draw() {
+        ctx.fillStyle = COLORS.obst1; 
+        
+        if (this.type === 1) {
+            ctx.fillRect(this.x, this.y, this.w, this.h);
+            ctx.fillStyle = '#300';
+            ctx.fillRect(this.x + 10, this.y + 20, 20, 40);
+        } else if (this.type === 2) {
+            ctx.beginPath();
+            ctx.arc(this.x + this.w/2, this.y + this.h/2, 15, 0, Math.PI*2);
+            ctx.fill();
+            ctx.fillStyle = '#fff';
+            ctx.beginPath();
+            ctx.arc(this.x + this.w/2, this.y + this.h/2, 5, 0, Math.PI*2);
+            ctx.fill();
+            ctx.fillStyle = '#f00'; 
+            ctx.beginPath();
+            ctx.arc(this.x + this.w/2, this.y + this.h/2, 2, 0, Math.PI*2);
+            ctx.fill();
+        } else if (this.type === 3) {
+            ctx.fillRect(this.x + 3, this.y, 4, this.h);
+            ctx.beginPath();
+            ctx.moveTo(this.x + 5, this.y + this.h);
+            ctx.lineTo(this.x - 10, this.y + this.h + 40);
+            ctx.lineTo(this.x + 20, this.y + this.h + 40);
+            ctx.fill();
+            ctx.fillStyle = '#a00';
+            ctx.fillRect(this.x + 4, this.y + this.h + 30, 2, 10);
+        }
+    }
+}
+
+class Item {
+    constructor(x, y) {
+        this.x = x;
+        this.y = y;
+        this.size = 25;
+        this.collected = false;
+        this.bobOffset = Math.random() * Math.PI;
+    }
+
+    update() {
+        this.x -= gameSpeed;
+        this.y += Math.sin(frameCount * 0.1 + this.bobOffset) * 0.8;
+    }
+
+    draw() {
+        if (this.collected) return;
+        ctx.save();
+        ctx.translate(this.x, this.y);
+        
+        ctx.fillStyle = '#b00'; 
+        ctx.strokeStyle = '#300';
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        ctx.arc(12, 18, 10, 0, Math.PI, false);
+        ctx.lineTo(12, 0);
+        ctx.fill();
+        ctx.stroke();
+        
+        ctx.restore();
+    }
+}
+
+class Particle {
+    constructor(x, y, vx, vy, type) {
+        this.x = x;
+        this.y = y;
+        this.vx = vx;
+        this.vy = vy;
+        this.type = type; 
+        this.life = 1.0;
+        this.decay = Math.random() * 0.04 + 0.02; 
+    }
+    update() {
+        this.x += this.vx;
+        this.y += this.vy;
+        this.life -= this.decay;
+        if (this.type !== 'fire') this.vy += 0.3; 
+    }
+    draw() {
+        if (this.life <= 0) return;
+        
+        ctx.globalAlpha = Math.max(0, this.life);
+        if (this.type === 'fire') {
+            ctx.fillStyle = COLORS.flame[Math.floor(Math.random() * COLORS.flame.length)];
+            ctx.fillRect(this.x, this.y, 6 * this.life, 6 * this.life);
+        } else if (this.type === 'blood') {
+            ctx.fillStyle = Math.random() > 0.5 ? '#800000' : '#cc0000';
+            ctx.beginPath();
+            let r = Math.max(0, 5 * this.life);
+            ctx.arc(this.x, this.y, r, 0, Math.PI*2);
+            ctx.fill();
+        }
+        ctx.globalAlpha = 1.0;
+    }
+}
+
+class RagdollPart {
+    constructor(x, y, color, w, h) {
+        this.x = x;
+        this.y = y;
+        this.vx = (Math.random() - 0.5) * 20; 
+        this.vy = (Math.random() - 1) * 15;
+        this.color = color;
+        this.w = w || 15;
+        this.h = h || 15;
+        this.angle = 0;
+        this.rotSpeed = (Math.random() - 0.5);
+    }
+    update() {
+        this.x += this.vx;
+        this.y += this.vy;
+        this.vy += GRAVITY;
+        this.vx *= 0.99;
+        this.angle += this.rotSpeed;
+        
+        if (this.y > CANVAS_HEIGHT - 10) {
+            this.y = CANVAS_HEIGHT - 10;
+            this.vy *= -0.5; 
+            this.vx *= 0.8; 
+        }
+    }
+    draw() {
+        ctx.save();
+        ctx.translate(this.x, this.y);
+        ctx.rotate(this.angle);
+        ctx.fillStyle = this.color;
+        ctx.fillRect(-this.w/2, -this.h/2, this.w, this.h);
+        ctx.restore();
+    }
+}
+
+// --- CORE FUNCTIONS ---
+
+function initGame() {
+    bgElements = [];
+    for(let i=0; i<40; i++) { 
+        bgElements.push(new BackgroundElement());
+    }
+}
+
+function startGame() {
+    initAudio();
+    setDroneVolume(0.15); 
+    
+    initGame();
+    if (animationId) {
+        cancelAnimationFrame(animationId);
+    }
+
+    document.getElementById('start-screen').classList.add('hidden');
+    document.getElementById('game-over-screen').classList.add('hidden');
+    container.classList.remove('shake');
+    
+    player = new Player();
+    obstacles = [];
+    particles = [];
+    items = [];
+    ragdollParts = [];
+    score = 0;
+    distance = 0;
+    timeLeft = START_TIME;
+    gameState = 'playing';
+    gameSpeed = 2; 
+    frameCount = 0; 
+    
+    gameLoop(); 
+}
+
+function resetGame() {
+    startGame();
+}
+
+function gameOver(reason) {
+    if (gameState === 'gameover') return;
+    gameState = 'gameover';
+    
+    if(engineGain) engineGain.gain.setTargetAtTime(0, audioCtx.currentTime, 0.1);
+    setDroneVolume(0.4); 
+    playSound('crash');
+    playCreepySound(); 
+    
+    container.classList.add('shake');
+
+    for(let i=0; i<40; i++) {
+        particles.push(new Particle(player.x, player.y, (Math.random()-0.5)*15, (Math.random()-0.5)*15, 'blood'));
+    }
+
+    ragdollParts.push(new RagdollPart(player.x, player.y - 10, '#e6e1d3', 16, 16)); 
+    ragdollParts.push(new RagdollPart(player.x, player.y - 30, '#000', 20, 20)); 
+    ragdollParts.push(new RagdollPart(player.x, player.y, '#100', 20, 30)); 
+    ragdollParts.push(new RagdollPart(player.x - 20, player.y + 10, COLORS.broom, 40, 5));
+    ragdollParts.push(new RagdollPart(player.x + 20, player.y + 10, '#1a0505', 20, 20));
+
+    const msg = INSULTS[Math.floor(Math.random() * INSULTS.length)];
+    document.getElementById('death-msg').innerText = msg;
+    document.getElementById('final-score').innerText = "Linh hồn thu được: " + Math.floor(score);
+    
+    setTimeout(() => {
+        document.getElementById('game-over-screen').classList.remove('hidden');
+    }, 1000); 
+}
+
+function checkCollision(rect1, rect2) {
+    return (rect1.x < rect2.x + rect2.w &&
+            rect1.x + rect1.width > rect2.x &&
+            rect1.y < rect2.y + rect2.h &&
+            rect1.y + rect1.height > rect2.y);
+}
+
+function gameLoop() {
+    if (gameState === 'playing') {
+        frameCount++;
+        score = distance / 10;
+        
+        gameSpeed = 2 + (60 - timeLeft)/40; 
+        if (gameSpeed > 5) gameSpeed = 5;
+
+        // Random Horror Events
+        if (frameCount % 300 === 0 && Math.random() < 0.4) {
+            playCreepySound();
+        }
+
+        // Logic Tiếng Tim đập (Heartbeat) - Khi dưới 10s
+        if (timeLeft < 10) {
+            // Nhịp: Bùm ... Bùm (Chu kỳ 60 frame = 1s)
+            // Nhịp 1: Frame 0
+            if (frameCount % 60 === 0) {
+                playHeartbeat(0.9); // Rất to (0.9)
+            }
+            // Nhịp 2 (nhẹ hơn): Frame 10 (mô phỏng tiếng tim đập đôi "lub-dub")
+            if (frameCount % 60 === 10) {
+                playHeartbeat(0.6); // Nhẹ hơn chút
+            }
+        }
+
+        if (frameCount % 60 === 0) {
+            timeLeft--;
+            if (timeLeft <= 0) gameOver("Hết giờ! Linh hồn tan biến!");
+        }
+
+        if (timeLeft > 40) phase = 1;
+        else if (timeLeft > 20) phase = 2;
+        else phase = 3;
+
+        let minGap = 200 + (gameSpeed * 10);
+        let lastObstacleX = obstacles.length > 0 ? obstacles[obstacles.length-1].x : 0;
+        
+        if (CANVAS_WIDTH - lastObstacleX > minGap) {
+             if (Math.random() < 0.05) {
+                 let type = 1;
+                 if (phase === 2) type = Math.random() > 0.4 ? 2 : 1; 
+                 if (phase === 3) type = Math.floor(Math.random() * 3) + 1; 
+                 obstacles.push(new Obstacle(CANVAS_WIDTH + 50, type));
+             }
+        }
+
+        if (frameCount % 400 === 0) {
+            items.push(new Item(CANVAS_WIDTH + 50, Math.random() * (CANVAS_HEIGHT - 150) + 75));
+        }
+
+        player.update();
+        bgElements.forEach(s => s.update(gameSpeed));
+
+        for (let i = obstacles.length - 1; i >= 0; i--) {
+            let obs = obstacles[i];
+            obs.update();
+            
+            if (checkCollision(player.getHitbox(), obs)) {
+                gameOver();
+            }
+
+            if (obs.x < -100) obstacles.splice(i, 1);
+        }
+
+        for (let i = items.length - 1; i >= 0; i--) {
+            let item = items[i];
+            item.update();
+            let itemRect = {x: item.x, y: item.y, w: item.size, h: item.size};
+            
+            if (checkCollision(player.getHitbox(), itemRect)) {
+                items.splice(i, 1);
+                timeLeft += 3;
+                score += 100;
+                playSound('collect');
+                
+                let el = document.getElementById('timer-display');
+                el.style.color = '#000';
+                el.style.transform = "scale(1.5)";
+                setTimeout(() => {
+                    el.style.color = '#cc0000';
+                    el.style.transform = "scale(1)";
+                }, 300);
+            }
+
+            if (item.x < -100) items.splice(i, 1);
+        }
+
+        for (let i = particles.length - 1; i >= 0; i--) {
+            particles[i].update();
+            if (particles[i].life <= 0) particles.splice(i, 1);
+        }
+
+    } else if (gameState === 'gameover') {
+        ragdollParts.forEach(p => p.update());
+        obstacles.forEach(o => o.update());
+        bgElements.forEach(s => s.update(gameSpeed * 0.1)); 
+        
+        for (let i = particles.length - 1; i >= 0; i--) {
+            particles[i].update();
+            if (particles[i].life <= 0) particles.splice(i, 1);
+        }
+    }
+
+    ctx.clearRect(0, 0, CANVAS_WIDTH, CANVAS_HEIGHT);
+
+    // Daylight Gradient
+    let bgGradient = ctx.createLinearGradient(0, 0, 0, CANVAS_HEIGHT);
+    bgGradient.addColorStop(0, COLORS.skyStart);
+    bgGradient.addColorStop(1, COLORS.skyEnd);
+    ctx.fillStyle = bgGradient;
+    ctx.fillRect(0,0, CANVAS_WIDTH, CANVAS_HEIGHT);
+
+    bgElements.forEach(s => s.draw());
+
+    // White Sun (Very bright)
+    ctx.fillStyle = '#ffffff';
+    ctx.shadowBlur = 40;
+    ctx.shadowColor = '#ffcccc'; // Subtle red glow
+    ctx.beginPath();
+    ctx.arc(CANVAS_WIDTH - 150, 100, 40, 0, Math.PI*2);
+    ctx.fill();
+    ctx.shadowBlur = 0;
+
+    items.forEach(i => i.draw()); 
+    obstacles.forEach(o => o.draw());
+    particles.forEach(p => p.draw());
+    
+    if (gameState !== 'gameover') {
+        player.draw();
+    } else {
+        ragdollParts.forEach(p => p.draw());
+    }
+    
+    document.getElementById('score-display').innerText = "LINH HỒN: " + Math.floor(score);
+    let timerEl = document.getElementById('timer-display');
+    timerEl.innerText = Math.floor(timeLeft);
+    if (timeLeft < 10) timerEl.classList.add('timer-warning');
+    else timerEl.classList.remove('timer-warning');
+
+    if (gameState === 'playing' || gameState === 'gameover') {
+        animationId = requestAnimationFrame(gameLoop);
+    }
+}
+
+// Input Handling
+function handleInputStart(e) {
+    if (e.target.tagName === 'BUTTON') return; 
+    if (e.type === 'touchstart') e.preventDefault();
+    if (gameState === 'playing') {
+        inputActive = true;
+    }
+}
+
+function handleInputEnd(e) {
+    inputActive = false;
+}
+
+window.addEventListener('mousedown', handleInputStart);
+window.addEventListener('mouseup', handleInputEnd);
+window.addEventListener('touchstart', handleInputStart, {passive: false});
+window.addEventListener('touchend', handleInputEnd);
+window.addEventListener('keydown', (e) => {
+    if (e.code === 'Space') {
+        if (gameState !== 'playing') return;
+        inputActive = true;
+    }
+});
+window.addEventListener('keyup', (e) => {
+    if (e.code === 'Space') inputActive = false;
+});
+
+initGame();
+
+</script>
+</body>
+</html>
